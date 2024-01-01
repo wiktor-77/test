@@ -1,0 +1,63 @@
+---
+- name: Konfiguracja serwera FTP 
+  hosts: servers
+  vars:
+    ftpcfg : /etc/vsftpd/vsftpd.conf
+  tasks:
+    - name: Backup konfigu
+      fetch: 
+        src: '{{ ftpcfg }}' 
+        dest: /tmp
+   
+
+    - name: Instalacja oprogramowania
+      dnf:
+        name: vsftpd
+        state: latest
+
+    - name: Konfiguracja fiewalld
+      firewalld:
+        service: ftp
+        immediate: yes
+        permanent: yes
+        state: enabled
+
+    - name: Uruchomienie service
+      service:
+        name: httpd
+        state: started
+        enabled: yes
+      ignore_errors: yes
+
+    - name: Skopiowanie plikow 
+      copy:
+        dest: /var/ftp/pub
+        src: '{{ item }}' 
+      loop:
+        - plik1
+        - plik2
+
+    - block:
+
+      - name: zmien konfigurację vftpd 
+        lineinfile:
+          path: '{{ ftpcfg }}' 
+          regexp: '^anonymous_enable='
+          line: 'anonymous_enable=YES'
+        notify: Restart uslugi
+
+      - name: restart ftpd      
+        meta: flush_handlers
+  
+      rescue:
+       - name: Przywrocenie konfiguracji uslugi
+         copy:
+           src: '/tmp/{{ ansible_hostname }}/{{ ftpcfg }}'
+           dest: '{{ ftpcfg }}' 
+         notify: Restart uslugi
+
+  handlers:
+    - name : Restart uslugi
+      systemd:
+        name: vsftpd
+        state: restarted
